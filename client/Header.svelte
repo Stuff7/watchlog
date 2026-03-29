@@ -4,19 +4,14 @@
   import { persistMedia } from "$/App.svelte";
   import ImportDialog from "$/ImportDialog.svelte";
   import Setup from "./Setup.svelte";
+  import Credentials from "./Credentials.svelte";
 
   type Props = {
     profile?: Profile;
     is_grid: boolean;
-    is_db_connected: boolean;
     onError: (msg: string) => void;
   };
-  let {
-    profile,
-    is_grid = $bindable(),
-    onError,
-    is_db_connected = $bindable(),
-  }: Props = $props();
+  let { profile, is_grid = $bindable(), onError }: Props = $props();
 
   let query = $state("");
   let results = $state<Media[]>([]);
@@ -82,7 +77,7 @@
     <a href="/" class="sl-wordmark" aria-label="WatchLog home"
       ><i></i> WatchLog
     </a>
-    <Setup bind:open={is_setup_open} bind:is_db_connected />
+    <Setup bind:open={is_setup_open} />
 
     <div class="sl-divider"></div>
 
@@ -172,13 +167,7 @@
       
     </button>
 
-    <button
-      class="button icon bordered"
-      onclick={() => (is_setup_open = true)}
-      class:text-lime-400={is_db_connected}
-    >
-      
-    </button>
+    <Credentials />
     <div class="sl-spacer"></div>
 
     <!-- View toggle -->

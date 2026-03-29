@@ -46,22 +46,38 @@
     fetchMovie,
   } from "$/tmdb.ts";
   import { initWorker, query } from "./db";
+  import { connect, local, saveLocal } from "./storage.svelte";
 
   onMount(() => {
-    initWorker();
+    initWorker().then(() => {
+      if (
+        local.autoconnect &&
+        local.dropbox_refresh_token &&
+        local.dropbox_client_id &&
+        local.dropbox_client_secret &&
+        local.dropbox_app_name
+      )
+        connect();
+    });
+
     const sync = () => (path = location.pathname);
     window.addEventListener("popstate", sync);
 
     return () => window.removeEventListener("popstate", sync);
   });
 
-  let is_db_connected = $state(false);
   let is_grid = $state(false);
   let profiles = $state<Profile[]>([]);
   let error_message = $state<string | null>(null);
 
+  $effect(saveLocal);
+
   $effect(() => {
-    if (!is_db_connected) return;
+    error_message = local.error;
+  });
+
+  $effect(() => {
+    if (!local.db_connected) return;
 
     api.getProfiles().then((data) => {
       for (const p of data) for (const m of p.list) m.genres ??= [];
@@ -189,13 +205,12 @@
   onpointerdown={() => {
     query("SELECT id, name, open FROM profiles ORDER BY rowid ASC")
       .then(console.log)
-      .catch(() => (is_db_connected = false));
+      .catch(() => (local.db_connected = false));
   }}
 >
   <Header
     profile={selected_profile}
     bind:is_grid
-    bind:is_db_connected
     onError={(msg) => (error_message = msg)}
   />
 
@@ -247,9 +262,11 @@
 
   <Dialog open={!!error_message} onClose={() => (error_message = null)}>
     {#snippet header()}Something went wrong{/snippet}
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2 p-2">
       <p class="basis-full text-red-400 font-mono text-sm">{error_message}</p>
-      <button class="grow" onclick={() => (error_message = null)}>OK</button>
+      <button class="button grow" onclick={() => (error_message = null)}
+        >OK</button
+      >
     </div>
   </Dialog>
 

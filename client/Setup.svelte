@@ -1,74 +1,90 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { initWorker, initDB, saveDB, query } from "./db";
+  import { saveDB, query } from "./db.ts";
   import Dialog from "./Dialog.svelte";
-  import { credentials } from "./api.svelte.ts";
+  import { local, connect } from "./storage.svelte.ts";
   import Input from "./Input.svelte";
+  import AuthGuide from "./AuthGuide.svelte";
+  import Collapsible from "./Collapsible.svelte";
 
   type Props = {
     open: boolean;
-    is_db_connected: boolean;
   };
-  let { open = $bindable(), is_db_connected = $bindable() }: Props = $props();
+  let { open = $bindable() }: Props = $props();
 
-  let setup_error = $state("");
   let rows = $state<Record<string, unknown>[]>([]);
   let status = $state("idle");
-
-  onMount(() => {
-    initWorker();
-    if (credentials.dropbox_token && credentials.dropbox_app_name) connect();
-  });
-
-  async function connect() {
-    setup_error = "";
-    try {
-      await initDB(credentials.dropbox_token, credentials.dropbox_app_name);
-      localStorage.setItem("dropbox_token", credentials.dropbox_token);
-      localStorage.setItem("dropbox_app_name", credentials.dropbox_app_name);
-      localStorage.setItem("tmdb_key", credentials.tmdb_key);
-      is_db_connected = true;
-    } catch (e: unknown) {
-      is_db_connected = false;
-      setup_error = e instanceof Error ? e.message : String(e);
-    }
-  }
+  let is_editing_creds = $state(false);
 
   let q = $state("");
   async function run() {
     status = "running";
     rows = await query(q);
     status = "done";
-    await saveDB(credentials.dropbox_token, credentials.dropbox_app_name);
+    await saveDB(local.dropbox_app_name);
   }
 </script>
 
 <Dialog bind:open>
   <div class="rounded-sm p-10 bg-neutral-900 flex flex-col gap-5 w-200">
-    {#if !is_db_connected}
+    {#snippet credsForm()}
+      <AuthGuide />
+
+      <Input
+        placeholder="Dropbox client ID"
+        bind:value={local.dropbox_client_id}
+      />
+      <Input
+        placeholder="Dropbox client secret"
+        bind:value={local.dropbox_client_secret}
+      />
+      <Input
+        placeholder="Dropbox refresh token"
+        bind:value={local.dropbox_refresh_token}
+      />
+      <Input
+        placeholder="Dropbox app name"
+        bind:value={local.dropbox_app_name}
+      />
+      <Input placeholder="TMDB Key" bind:value={local.tmdb_key} />
+
+      <label
+        class="flex items-center justify-between group cursor-pointer bg-white/5 p-4 rounded border border-white/5 hover:border-white/10 transition-colors"
+      >
+        <div class="flex flex-col gap-0.5">
+          <span
+            class="text-xs font-bold text-zinc-200 uppercase tracking-wider"
+          >
+            Autoconnect
+          </span>
+          <span class="text-[10px] text-zinc-500">
+            Initialize database automatically on page load
+          </span>
+        </div>
+
+        <input
+          type="checkbox"
+          bind:checked={local.autoconnect}
+          class="w-5 h-5 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-900 transition-all cursor-pointer"
+        />
+      </label>
+
+      <button class="button w-full" onclick={connect}>
+        {local.db_connected ? "Reconnect" : "Connect"}
+      </button>
+
+      {#if local.error}
+        <p class="text-xs leading-relaxed text-red-500">
+          {local.error}
+        </p>
+      {/if}
+    {/snippet}
+    {#if !local.db_connected}
       <h1
         class="font-sans text-3xl font-extrabold tracking-tighter text-white leading-none"
       >
         Credentials
       </h1>
-
-      <Input
-        placeholder="Dropbox access token"
-        bind:value={credentials.dropbox_token}
-      />
-      <Input
-        placeholder="Dropbox app name"
-        bind:value={credentials.dropbox_app_name}
-      />
-      <Input placeholder="TMDB Key" bind:value={credentials.tmdb_key} />
-
-      <button class="button" onclick={connect}> Connect </button>
-
-      {#if setup_error}
-        <p class="text-xs leading-relaxed text-red-500">
-          {setup_error}
-        </p>
-      {/if}
+      {@render credsForm()}
     {:else}
       <h1
         class="font-sans text-3xl font-extrabold tracking-tighter text-white leading-none"
@@ -120,6 +136,15 @@
           </div>
         </div>
       {/if}
+      <Collapsible
+        open={is_editing_creds}
+        onclick={() => (is_editing_creds = !is_editing_creds)}
+      >
+        {#snippet label()}Edit credentials{/snippet}
+        <div class="flex flex-col gap-5">
+          {@render credsForm()}
+        </div>
+      </Collapsible>
     {/if}
   </div>
 </Dialog>

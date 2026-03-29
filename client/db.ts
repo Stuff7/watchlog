@@ -18,30 +18,57 @@ function send(type: string, payload: unknown): Promise<OutboundMsg> {
   });
 }
 
-export function initWorker(): void {
-  worker = new Worker(new URL("./db.worker.js", import.meta.url), {
-    type: "module",
+export function initWorker(): Promise<void> {
+  return new Promise((res, rej) => {
+    worker = new Worker(new URL("./db.worker.js", import.meta.url), {
+      type: "module",
+    });
+
+    worker.addEventListener(
+      "message",
+      (e: MessageEvent<string>) => {
+        if (e.data === "ready") {
+          worker.addEventListener(
+            "message",
+            (e: MessageEvent<OutboundMsg>): void => {
+              const msg = e.data;
+              const entry = pending.get(msg.id);
+              if (entry === undefined) return;
+              pending.delete(msg.id);
+              if (msg.type === "error") {
+                entry.reject(new Error(msg.error));
+              } else {
+                entry.resolve(msg);
+              }
+            },
+          );
+          res();
+        } else {
+          rej(`Expected "ready" as first message, instead got ${e.data}`);
+        }
+      },
+      { once: true },
+    );
   });
-  worker.onmessage = (e: MessageEvent<OutboundMsg>): void => {
-    const msg = e.data;
-    const entry = pending.get(msg.id);
-    if (entry === undefined) return;
-    pending.delete(msg.id);
-    if (msg.type === "error") {
-      entry.reject(new Error(msg.error));
-    } else {
-      entry.resolve(msg);
-    }
-  };
 }
 
-export async function initDB(token: string, app_name: string): Promise<void> {
-  const reply = await send("init", { token, app_name });
+export async function initDB(
+  refresh_token: string,
+  client_id: string,
+  client_secret: string,
+  app_name: string,
+): Promise<void> {
+  const reply = await send("init", {
+    refresh_token,
+    client_id,
+    client_secret,
+    app_name,
+  });
   if (reply.type !== "init") throw new Error("Unexpected reply type");
 }
 
-export async function saveDB(token: string, app_name: string): Promise<void> {
-  await send("save", { token, app_name });
+export async function saveDB(app_name: string): Promise<void> {
+  await send("save", { app_name });
 }
 
 export async function query<T extends Record<string, SqlValue>>(

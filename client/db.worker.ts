@@ -11,13 +11,18 @@ import schema from "$/sql/migrations/0000.sql";
 type InitMsg = {
   id: number;
   type: "init";
-  payload: { token: string; app_name: string };
+  payload: {
+    refresh_token: string;
+    client_id: string;
+    client_secret: string;
+    app_name: string;
+  };
 };
 
 type SaveMsg = {
   id: number;
   type: "save";
-  payload: { token: string; app_name: string };
+  payload: { app_name: string };
 };
 
 type QueryMsg = {
@@ -43,6 +48,51 @@ export type OutboundMsg = InitReply | SaveReply | QueryReply | ErrorReply;
 
 const sqlite3: Sqlite3Static = await sqlite3InitModule();
 let db: Database | null = null;
+
+let refresh_token: string | null = null;
+let client_id: string | null = null;
+let client_secret: string | null = null;
+
+let access_token: string | null = null;
+let access_token_expires_at: number = 0; // epoch ms
+
+// -- Token management ---------------------------------------------------------
+
+async function refreshAccessToken(): Promise<void> {
+  if (!refresh_token || !client_id || !client_secret) {
+    throw new Error("OAuth credentials not initialized");
+  }
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refresh_token,
+    client_id: client_id,
+    client_secret: client_secret,
+  });
+
+  const response = await fetch("https://api.dropbox.com/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Token refresh failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  access_token = data.access_token;
+  // expires_in is in seconds; subtract 60s buffer to refresh slightly early
+  access_token_expires_at = Date.now() + (data.expires_in - 60) * 1000;
+}
+
+async function getAccessToken(): Promise<string> {
+  if (!access_token || Date.now() >= access_token_expires_at) {
+    await refreshAccessToken();
+  }
+  return access_token!;
+}
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -77,7 +127,9 @@ function serializeInternal(db_ptr: WasmPointer): Uint8Array {
 
 // -- Dropbox Actions ----------------------------------------------------------
 
-async function loadFromDropbox(token: string, app_name: string): Promise<void> {
+async function loadFromDropbox(app_name: string): Promise<void> {
+  const token = await getAccessToken();
+
   const response = await fetch(
     "https://content.dropboxapi.com/2/files/download",
     {
@@ -93,7 +145,6 @@ async function loadFromDropbox(token: string, app_name: string): Promise<void> {
   db = new sqlite3.oo1.DB();
 
   if (response.status === 409) {
-    // File doesn't exist yet — start fresh
     db.exec(schema);
     return;
   }
@@ -120,9 +171,10 @@ async function loadFromDropbox(token: string, app_name: string): Promise<void> {
   }
 }
 
-async function saveToDropbox(token: string, app_name: string): Promise<void> {
+async function saveToDropbox(app_name: string): Promise<void> {
   if (!db) throw new Error("No DB to save");
 
+  const token = await getAccessToken();
   const binary = serializeInternal(db.pointer!);
 
   const response = await fetch(
@@ -150,34 +202,42 @@ async function saveToDropbox(token: string, app_name: string): Promise<void> {
 
 // -- Message router -----------------------------------------------------------
 
-self.onmessage = async (e: MessageEvent<InboundMsg>): Promise<void> => {
-  const msg = e.data;
-  try {
-    switch (msg.type) {
-      case "init": {
-        await loadFromDropbox(msg.payload.token, msg.payload.app_name);
-        self.postMessage({ id: msg.id, type: "init" } as InitReply);
-        break;
+self.addEventListener(
+  "message",
+  async (e: MessageEvent<InboundMsg>): Promise<void> => {
+    const msg = e.data;
+    try {
+      switch (msg.type) {
+        case "init": {
+          refresh_token = msg.payload.refresh_token;
+          client_id = msg.payload.client_id;
+          client_secret = msg.payload.client_secret;
+          await loadFromDropbox(msg.payload.app_name);
+          self.postMessage({ id: msg.id, type: "init" } as InitReply);
+          break;
+        }
+        case "save": {
+          await saveToDropbox(msg.payload.app_name);
+          self.postMessage({ id: msg.id, type: "save" } as SaveReply);
+          break;
+        }
+        case "query": {
+          if (!db) throw new Error("DB not initialized");
+          const rows = db.exec({
+            sql: msg.payload.sql,
+            bind: msg.payload.bind,
+            returnValue: "resultRows",
+            rowMode: "object",
+          });
+          self.postMessage({ id: msg.id, type: "query", rows } as QueryReply);
+          break;
+        }
       }
-      case "save": {
-        await saveToDropbox(msg.payload.token, msg.payload.app_name);
-        self.postMessage({ id: msg.id, type: "save" } as SaveReply);
-        break;
-      }
-      case "query": {
-        if (!db) throw new Error("DB not initialized");
-        const rows = db.exec({
-          sql: msg.payload.sql,
-          bind: msg.payload.bind,
-          returnValue: "resultRows",
-          rowMode: "object",
-        });
-        self.postMessage({ id: msg.id, type: "query", rows } as QueryReply);
-        break;
-      }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      self.postMessage({ id: msg.id, type: "error", error } as ErrorReply);
     }
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    self.postMessage({ id: msg.id, type: "error", error } as ErrorReply);
-  }
-};
+  },
+);
+
+self.postMessage("ready");

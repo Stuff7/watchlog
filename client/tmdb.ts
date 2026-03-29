@@ -18,7 +18,7 @@ import type {
   Person,
   TMDB,
 } from "$/types.d.ts";
-import { credentials } from "./api.svelte.ts";
+import { local } from "./storage.svelte.ts";
 
 export const IMAGE_BASE_W92 = "https://image.tmdb.org/t/p/w92";
 export const IMAGE_BASE_W185 = "https://image.tmdb.org/t/p/w185";
@@ -46,7 +46,7 @@ async function get<T>(
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString(), {
     headers: {
-      Authorization: `Bearer ${credentials.tmdb_key}`,
+      Authorization: `Bearer ${local.tmdb_key}`,
       accept: "application/json",
     },
   });

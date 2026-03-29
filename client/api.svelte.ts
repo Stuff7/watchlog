@@ -2,12 +2,6 @@ import type { EpisodeRef, Media, Profile, Status } from "$/types.d.ts";
 import type { SqlValue } from "@sqlite.org/sqlite-wasm";
 import { query } from "./db.ts";
 
-export const credentials = $state({
-  tmdb_key: localStorage.getItem("tmdb_key") ?? "",
-  dropbox_token: localStorage.getItem("dropbox_token") ?? "",
-  dropbox_app_name: localStorage.getItem("dropbox_app_name") ?? "",
-});
-
 function toMediaType(val: unknown): Media["media_type"] {
   const s = String(val);
   return s === "tv" || s === "movie" ? s : "movie";
@@ -15,7 +9,7 @@ function toMediaType(val: unknown): Media["media_type"] {
 
 function toStatus(val: unknown): Status {
   const s = String(val);
-  const validStatuses: Status[] = [
+  const valid_statuses: Status[] = [
     "Released",
     "Planned",
     "In Production",
@@ -25,7 +19,7 @@ function toStatus(val: unknown): Status {
   ];
 
   // Check if the string from DB is one of our allowed Union members
-  if ((validStatuses as string[]).includes(s)) {
+  if ((valid_statuses as string[]).includes(s)) {
     return s as Status;
   }
 
@@ -36,12 +30,12 @@ function toStatus(val: unknown): Status {
  * Loads all profiles and their associated media items via the Worker API.
  */
 export async function getProfiles(): Promise<Profile[]> {
-  const profileRows = await query<{ id: string; name: string; open: number }>(
+  const profile_rows = await query<{ id: string; name: string; open: number }>(
     "SELECT id, name, open FROM profiles ORDER BY rowid ASC",
   );
 
   return Promise.all(
-    profileRows.map(async (row) => {
+    profile_rows.map(async (row) => {
       const id = row.id;
       return {
         id,
@@ -53,7 +47,7 @@ export async function getProfiles(): Promise<Profile[]> {
   );
 }
 
-async function loadMediaForProfile(profileId: string): Promise<Media[]> {
+async function loadMediaForProfile(profile_id: string): Promise<Media[]> {
   const sql = `
     SELECT
       m.id, m.tmdb_id, m.name, m.media_type, m.status,
@@ -75,7 +69,7 @@ async function loadMediaForProfile(profileId: string): Promise<Media[]> {
     ORDER BY pm.position ASC
   `;
 
-  const rows = await query<Record<string, SqlValue>>(sql, [profileId]);
+  const rows = await query<Record<string, SqlValue>>(sql, [profile_id]);
 
   return Promise.all(
     rows.map(async (row) => {
@@ -137,10 +131,10 @@ async function loadMediaForProfile(profileId: string): Promise<Media[]> {
   );
 }
 
-async function loadGenres(mediaId: string): Promise<string[]> {
+async function loadGenres(media_id: string): Promise<string[]> {
   const rows = await query<{ genre: string }>(
     "SELECT genre FROM media_genres WHERE media_id = ? ORDER BY genre ASC",
-    [mediaId],
+    [media_id],
   );
   return rows.map((r) => r.genre);
 }
@@ -214,7 +208,7 @@ export async function cloneProfile(
  * Handles flattening the last/next episode objects for the DB.
  */
 export async function addMedia(
-  profileId: string,
+  profile_id: string,
   media: Media,
 ): Promise<string> {
   // 1. Resolve canonical ID (Check if this TMDB entry already exists in our 'media' table)
@@ -315,9 +309,9 @@ export async function addMedia(
   }
 
   // 5. Link to Profile (Calculates the next 'position' in the list)
-  const [posRow] = await query<{ pos: number }>(
+  const [pos_row] = await query<{ pos: number }>(
     "SELECT COALESCE(MAX(position), 0) + 1 as pos FROM profile_media WHERE profile_id = ? AND deleted_at IS NULL",
-    [profileId],
+    [profile_id],
   );
 
   await query(
@@ -327,7 +321,7 @@ export async function addMedia(
        position = excluded.position,
        added_at = excluded.added_at,
        deleted_at = NULL`,
-    [profileId, id, posRow.pos, Date.now()],
+    [profile_id, id, pos_row.pos, Date.now()],
   );
 
   return id;
@@ -338,12 +332,12 @@ export async function addMedia(
  * Translates the .DELETE logic.
  */
 export async function removeMedia(
-  profileId: string,
-  mediaId: string,
+  profile_id: string,
+  media_id: string,
 ): Promise<void> {
   await query(
     "UPDATE profile_media SET deleted_at = ? WHERE profile_id = ? AND media_id = ?",
-    [Date.now(), profileId, mediaId],
+    [Date.now(), profile_id, media_id],
   );
 }
 
@@ -481,8 +475,8 @@ export async function updateMediaWatched(
   const now = Date.now();
 
   // SQLite stores booleans as 1 (true) or 0 (false)
-  const watchedInt = watched ? 1 : 0;
-  const watchedAt = watched ? now : null;
+  const watched_int = watched ? 1 : 0;
+  const watched_at = watched ? now : null;
 
   await query(
     `INSERT INTO watch_progress (
@@ -500,7 +494,7 @@ export async function updateMediaWatched(
         ELSE NULL 
       END,
       updated_at = excluded.updated_at`,
-    [profile_id, media_id, watchedInt, watchedAt, now],
+    [profile_id, media_id, watched_int, watched_at, now],
   );
 }
 
@@ -524,7 +518,7 @@ export async function updateEpisodeWatched(
   update: EpisodeProgressUpdate,
 ): Promise<void> {
   const now = Date.now();
-  const watchedInt = update.watched ? 1 : 0;
+  const watched_int = update.watched ? 1 : 0;
 
   // 1. Verify Media exists
   const [media] = await query("SELECT id FROM media WHERE id = ?", [
@@ -541,7 +535,7 @@ export async function updateEpisodeWatched(
   );
 
   // 3. Upsert Episode and get the internal DB ID
-  const upsertRes = await query<{ id: number }>(
+  const upsert_res = await query<{ id: number }>(
     `INSERT INTO episodes (season_id, media_id, episode_number, season_number, name, air_date, runtime, still)
      SELECT s.id, ?, ?, ?, ?, ?, ?, ?
      FROM seasons s WHERE s.media_id = ? AND s.season_number = ?
@@ -564,22 +558,22 @@ export async function updateEpisodeWatched(
     ],
   );
 
-  let internalId = upsertRes[0]?.id;
+  let internal_id = upsert_res[0]?.id;
 
   // Fallback: If RETURNING didn't give an ID (due to DO UPDATE), fetch it manually
-  if (!internalId) {
+  if (!internal_id) {
     const [sel] = await query<{ id: number }>(
       "SELECT id FROM episodes WHERE media_id = ? AND season_number = ? AND episode_number = ?",
       [update.media_id, update.season_number, update.episode_number],
     );
     if (!sel) throw new Error("Episode upsert failed");
-    internalId = sel.id;
+    internal_id = sel.id;
   }
 
   // 4. Check for existing watch progress
   const [ewp] = await query(
     "SELECT 1 FROM episode_watch_progress WHERE profile_id = ? AND episode_id = ?",
-    [profile_id, internalId],
+    [profile_id, internal_id],
   );
 
   if (ewp) {
@@ -590,7 +584,7 @@ export async function updateEpisodeWatched(
          watched_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
          updated_at = ?
        WHERE profile_id = ? AND episode_id = ?`,
-      [watchedInt, watchedInt, now, now, profile_id, internalId],
+      [watched_int, watched_int, now, now, profile_id, internal_id],
     );
   } else {
     // 5b. Insert new progress
@@ -600,10 +594,10 @@ export async function updateEpisodeWatched(
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         profile_id,
-        internalId,
+        internal_id,
         update.media_id,
         update.season_number,
-        watchedInt,
+        watched_int,
         update.watched ? now : null,
         now,
       ],
