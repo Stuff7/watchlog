@@ -23,7 +23,7 @@
 
 <Dialog bind:open>
   {#snippet header()}
-    <div class="flex items-center gap-4 py-1 w-full">
+    <div class="flex items-center gap-4 py-1 min-w-[50vw]">
       <div class="flex flex-col">
         <h1
           class="font-sans text-xl font-black tracking-tighter text-white uppercase"

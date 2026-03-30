@@ -11,11 +11,7 @@
     is_grid: boolean;
     onError: (msg: string) => void;
   };
-  let {
-    profile = $bindable(),
-    is_grid = $bindable(),
-    onError,
-  }: Props = $props();
+  let { profile, is_grid = $bindable(), onError }: Props = $props();
 
   let query = $state("");
   let results = $state<Media[]>([]);

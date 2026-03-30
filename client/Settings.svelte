@@ -16,7 +16,7 @@
     </h1>
   {/snippet}
 
-  <fieldset class="p-5 bg-neutral-900 grid gap-2 min-w-200 border-none">
+  <fieldset class="p-5 bg-neutral-900 grid gap-2 min-w-[70vw] border-none">
     <label
       class="flex items-center justify-between bg-white/5 p-4 rounded border border-white/5 hover:border-white/10 transition-colors cursor-pointer"
     >

@@ -22,7 +22,7 @@
   };
 
   type Props = { selected_profile?: Profile; is_grid: boolean };
-  let { selected_profile = $bindable(), is_grid }: Props = $props();
+  let { selected_profile, is_grid }: Props = $props();
 
   const profile_id = $derived(getPath().split("/").filter(Boolean)[0] ?? "");
   const detailHref = (media: Media) =>
