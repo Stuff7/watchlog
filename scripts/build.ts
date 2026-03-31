@@ -17,6 +17,7 @@ const MANIFEST = path.join(OUT, ".build-manifest.json");
 const isDev =
   Deno.env.get("NODE_ENV") === "development" || Deno.args.includes("--dev");
 
+const BASE_PATH = isDev ? "" : "/watchlog";
 // --- Config -------------------------------------------------------------------
 
 const TAILWIND_IN = path.join(SRC, "styles.css");
@@ -248,7 +249,7 @@ const buildSvelte: BuildStep<
       drop: isDev ? [] : ["console", "debugger"],
       define: {
         ...(isDev ? {} : { "process.env.NODE_ENV": '"production"' }),
-        "import.meta.env.BASE": isDev ? '""' : '"/watchlog"',
+        "import.meta.env.BASE": `"${BASE_PATH}"`,
       },
       plugins: [makeSveltePlugin(componentCss)],
       metafile: true,
@@ -298,6 +299,42 @@ const buildCss: BuildStep<string[]> = {
   },
 };
 
+const writeGithubPages: BuildStep = {
+  name: "GitHub Pages",
+  async run(): Promise<{ files: string[] }> {
+    if (isDev) return { files: [] };
+
+    const notFoundHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script>sessionStorage.redirect = location.pathname;</script>
+  <meta http-equiv="refresh" content="0;url=${BASE_PATH}/">
+</head>
+</html>`;
+
+    const redirectSnippet = `<script>
+  const r = sessionStorage.redirect;
+  delete sessionStorage.redirect;
+  if (r && r !== location.pathname) history.replaceState(null, null, r);
+</script>`;
+
+    const notFoundPath = path.join(OUT, "404.html");
+    await fs.promises.writeFile(notFoundPath, notFoundHtml, "utf8");
+
+    const indexPath = path.join(OUT, "index.html");
+    const index = await fs.promises.readFile(indexPath, "utf8");
+    await fs.promises.writeFile(
+      indexPath,
+      index.replace("<head>", `<head>\n  ${redirectSnippet}`),
+      "utf8",
+    );
+
+    console.log(`✅ GitHub Pages → 404.html + index.html patched`);
+    return { files: [notFoundPath] };
+  },
+};
+
 // --- Entry --------------------------------------------------------------------
 
 const t = "🎉 Build complete";
@@ -312,8 +349,15 @@ try {
     await Promise.all([copyPublic.run(), buildSvelte.run()]);
 
   const { files: cssFiles } = await buildCss.run(componentCss);
+  const { files: pagesFiles } = await writeGithubPages.run();
 
-  await writeManifest([...publicFiles, ...svelteFiles, ...cssFiles, MANIFEST]);
+  await writeManifest([
+    ...publicFiles,
+    ...svelteFiles,
+    ...cssFiles,
+    ...pagesFiles,
+    MANIFEST,
+  ]);
 
   console.timeEnd(t);
 } catch (err) {
