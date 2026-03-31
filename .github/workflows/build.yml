@@ -21,10 +21,12 @@ jobs:
           deno-version: v2.x
 
       - name: Install Tailwind CSS
-        run: npm install tailwindcss
+        run: |
+          npm install -g tailwindcss
+          echo "$(npm root -g)/.bin" >> $GITHUB_PATH
 
       - name: Bootstrap and build
-        run: PATH="$PATH:$(pwd)/node_modules/.bin" deno task bootstrap
+        run: deno task bootstrap
 
       - name: Deploy to gh-pages
         run: |
