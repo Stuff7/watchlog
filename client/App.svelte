@@ -70,21 +70,19 @@
   let profiles = $state<Profile[]>([]);
   let error_message = $state<string | null>(null);
 
-  let profiles_initialized = false;
   let last_saved = -1;
   $effect(() => {
-    $state.snapshot(profiles);
+    if (!local.db_dirty) return;
+
     untrack(() => {
-      if (!profiles_initialized) {
-        profiles_initialized = profiles.length > 0;
-        return;
-      }
       if (!local.autosave) return;
+
       local.saving_db = true;
       clearTimeout(last_saved);
       last_saved = setTimeout(async () => {
         await saveDB();
         local.saving_db = false;
+        local.db_dirty = false;
       }, local.autosave_delay_ms);
     });
   });

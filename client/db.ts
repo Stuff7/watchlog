@@ -79,6 +79,8 @@ export async function query<T extends Record<string, SqlValue>>(
 ): Promise<T[]> {
   const reply = await send("query", { sql, bind });
   if (reply.type !== "query") throw new Error("Unexpected reply type");
+  if (!sql.trimStart().toUpperCase().startsWith("SELECT"))
+    local.db_dirty = true;
   return reply.rows as T[];
 }
 

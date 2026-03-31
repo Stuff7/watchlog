@@ -26,6 +26,7 @@ export const local = $state({
   db_reload: 0,
   connecting_db: false,
   saving_db: false,
+  db_dirty: false,
   error: "",
 });
 
