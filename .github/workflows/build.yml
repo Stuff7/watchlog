@@ -38,7 +38,7 @@ jobs:
           git rm -rf .
 
           cp -r dist/. .
-          rm -rf dist
+          rm -rf dist node_modules
 
           touch .nojekyll
 
