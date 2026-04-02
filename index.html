@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script>
+  const r = sessionStorage.redirect;
+  delete sessionStorage.redirect;
+  if (r && r !== location.pathname) history.replaceState(null, null, r);
+</script>
+  <link rel="stylesheet" href="/watchlog/watchlog.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+</head>
+<body>
+	<div id="app"></div>
+  <div data-layer="dialogs" class="layer bg-black/20 backdrop-blur-md"></div>
+  <div data-layer="tooltips" class="layer pointer-events-none"></div>
+  <div data-layer="context-menu" class="layer pointer-events-none *:pointer-events-auto"></div>
+	<script src="/watchlog/main.js" type="module"></script>
+</body>
+</html>
